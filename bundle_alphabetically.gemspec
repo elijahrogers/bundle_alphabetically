@@ -3,14 +3,18 @@ require_relative "lib/bundle_alphabetically/version"
 Gem::Specification.new do |spec|
   spec.name          = "bundle_alphabetically"
   spec.version       = BundleAlphabetically::VERSION
-  spec.authors       = ["bundle_alphabetically"]
-  spec.email         = ["change-me@example.com"]
+  spec.authors       = ["Elijah Rogers"]
 
-  spec.summary       = "Bundler plugin that alphabetizes gem entries in Gemfile groups"
-  spec.description   = "A Bundler plugin that keeps your Gemfile organized by alphabetizing gem declarations within each group, automatically after installs or manually via a command."
+  spec.summary       = "Bundler plugin that alphabetizes gem entries"
+  spec.description   = "A Bundler plugin that keeps your Gemfile organized by alphabetizing gem declarations within each group automatically."
   spec.license       = "MIT"
+  spec.homepage      = "https://github.com/elijahrogers/bundle_alphabetically"
+  spec.metadata      = {
+    "source_code_uri" => "https://github.com/elijahrogers/bundle_alphabetically",
+    "changelog_uri"   => "https://github.com/elijahrogers/bundle_alphabetically/blob/main/CHANGELOG.md"
+  }
 
-  spec.files         = Dir["lib/**/*", "plugins.rb", "README.md"]
+  spec.files         = Dir["lib/**/*", "plugins.rb", "README.md", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
   spec.required_ruby_version = ">= 2.7"
