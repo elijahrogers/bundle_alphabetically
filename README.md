@@ -11,13 +11,13 @@ Install the plugin from a local checkout (see Bundler plugin docs at [Bundler pl
 
 ```bash
 cd /path/to/bundle_alphabetically
-bundler plugin install bundle_alphabetically --local
+bundle plugin install bundle_alphabetically --path .
 ```
 
 or from git:
 
 ```bash
-bundler plugin install bundle_alphabetically --git /path/to/bundle_alphabetically
+bundle plugin install bundle_alphabetically --git /path/to/bundle_alphabetically
 ```
 
 Once installed, Bundler will load `plugins.rb` and register the command and hooks.
@@ -30,8 +30,10 @@ Once installed, Bundler will load `plugins.rb` and register the command and hook
 - Preserves:
   - non-gem lines like `source`, `ruby`, `plugin`, `path`, etc.
   - group block structure and indentation
-  - comments and blank lines around gem entries
+  - comments and most surrounding blank lines
   - multi-line `gem` declarations (e.g. options hashes split across lines)
+
+- Normalizes formatting so consecutive `gem` lines are rendered without extra blank lines between them.
 
 It operates on the current `Bundler.default_gemfile` and rewrites it in place.
 

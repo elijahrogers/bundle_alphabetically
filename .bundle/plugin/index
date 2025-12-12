@@ -1,0 +1,12 @@
+---
+commands:
+  sort_gemfile: "bundle_alphabetically"
+hooks:
+  after-install-all:
+  - "bundle_alphabetically"
+load_paths:
+  bundle_alphabetically:
+  - "/Users/elijah/Documents/projects/bundle_alphabetically/lib"
+plugin_paths:
+  bundle_alphabetically: "/Users/elijah/Documents/projects/bundle_alphabetically"
+sources:

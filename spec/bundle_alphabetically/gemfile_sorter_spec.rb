@@ -65,13 +65,11 @@ RSpec.describe BundleAlphabetically::GemfileSorter do
         gem "rails",
             "~> 7.0",
             require: false
-
         gem "bootsnap", require: false
       GEMFILE
 
       expected = <<~GEMFILE
         gem "bootsnap", require: false
-
         gem "rails",
             "~> 7.0",
             require: false

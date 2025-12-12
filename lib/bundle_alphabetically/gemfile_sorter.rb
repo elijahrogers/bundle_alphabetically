@@ -3,6 +3,12 @@ require "set"
 
 module BundleAlphabetically
   class GemfileSorter
+    class CheckFailed < Bundler::BundlerError
+      def status_code
+        1
+      end
+    end
+
     class << self
       def run!(check: false, io: $stdout)
         gemfile = Bundler.default_gemfile
@@ -21,7 +27,7 @@ module BundleAlphabetically
         end
 
         if check
-          raise Bundler::BundlerError, "Gemfile is not alphabetically sorted"
+          raise CheckFailed, "Gemfile is not alphabetically sorted"
         else
           File.write(path, sorted)
           io.puts "Gemfile gems alphabetized by bundle_alphabetically"
@@ -44,12 +50,10 @@ module BundleAlphabetically
 
       def find_group_ranges(lines)
         ranges = []
-        i = 0
 
-        while i < lines.length
-          line = lines[i]
+        lines.each_with_index do |line, index|
           if group_header?(line)
-            header = i
+            header = index
             end_index = find_matching_end(lines, header)
 
             if end_index
@@ -59,12 +63,8 @@ module BundleAlphabetically
                 body_end: end_index - 1,
                 end: end_index
               }
-              i = end_index + 1
-              next
             end
           end
-
-          i += 1
         end
 
         ranges
@@ -101,25 +101,6 @@ module BundleAlphabetically
         nil
       end
 
-      def top_level_ranges(total_lines, in_group_indices)
-        ranges = []
-        start = nil
-
-        (0...total_lines).each do |idx|
-          if in_group_indices.include?(idx)
-            if start
-              ranges << { start: start, end: idx - 1 }
-              start = nil
-            end
-          else
-            start ||= idx
-          end
-        end
-
-        ranges << { start: start, end: total_lines - 1 } if start
-        ranges
-      end
-
       def sort_group_bodies!(lines, group_ranges)
         group_ranges.each do |range|
           body_start = range[:body_start]
@@ -133,14 +114,14 @@ module BundleAlphabetically
 
       def sort_top_level_segments!(lines, group_ranges)
         in_group_indices = group_ranges.flat_map { |r| (r[:header]..r[:end]) }.to_set
+        top_level_indices = (0...lines.size).reject { |idx| in_group_indices.include?(idx) }
+        return if top_level_indices.empty?
 
-        top_level_ranges(lines.size, in_group_indices).each do |range|
-          seg_start = range[:start]
-          seg_end = range[:end]
-          next if seg_end < seg_start
+        segment = top_level_indices.map { |idx| lines[idx] }
+        sorted_segment = sort_gem_lines(segment)
 
-          segment = lines[seg_start..seg_end]
-          lines[seg_start..seg_end] = sort_gem_lines(segment)
+        top_level_indices.each_with_index do |idx, pos|
+          lines[idx] = sorted_segment[pos]
         end
       end
 
@@ -169,6 +150,8 @@ module BundleAlphabetically
         separators = region_state[:separators]
         entries = region_state[:entries]
         unsortable = region_state[:unsortable]
+
+        separators = normalize_gem_separators(separators)
 
         # If we couldn't safely parse names, or there is nothing to sort,
         # return the region untouched.
@@ -284,6 +267,27 @@ module BundleAlphabetically
       def blank_or_comment?(line)
         stripped = line.lstrip
         stripped.empty? || stripped.start_with?("#")
+      end
+
+      def normalize_gem_separators(separators)
+        last_index = separators.length - 1
+
+        separators.each_with_index.map do |sep, idx|
+          # keep leading separators intact (comments / blank lines before the
+          # first gem in the region), and trailing separators (before the
+          # next non-gem line)
+          next sep if idx == 0 || idx == last_index
+
+          contains_comment = sep.any? { |line| line.lstrip.start_with?("#") }
+
+          if contains_comment
+            sep
+          else
+            # strip out pure blank lines so consecutive gem entries are
+            # rendered without empty lines between them
+            sep.reject { |line| line.lstrip.empty? }
+          end
+        end
       end
 
       def starter_keyword?(stripped)
