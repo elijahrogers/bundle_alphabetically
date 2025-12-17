@@ -3,6 +3,7 @@ require "bundler/plugin/api"
 
 require_relative "bundle_alphabetically/version"
 require_relative "bundle_alphabetically/gemfile_sorter"
+require_relative "bundle_alphabetically/group"
 
 module BundleAlphabetically
   class SortGemfileCommand < Bundler::Plugin::API
