@@ -42,40 +42,76 @@ module BundleAlphabetically
       end
 
       def sort_contents(contents)
-        @groups = []
         @lines = contents.lines
         return contents if lines.empty?
 
-        find_group_ranges(lines)
-
-        sort_group_bodies!(lines)
-        sort_top_level_segments!(lines)
+        process_gemfile!
 
         lines.join
       end
 
       private
 
-      def find_group_ranges(lines)
-        ranges = []
+      def process_gemfile!
+        i = 0
+        current_group_start = nil
 
-        lines.each_with_index do |line, index|
-          if group_header?(line)
-            header = index
-            end_index = find_matching_end(lines, header)
-
-            if end_index
-              groups << Group.new(lines, {
-                header: header,
-                body_start: header + 1,
-                body_end: end_index - 1,
-                end: end_index
-              })
-            end
+        while i < lines.size
+          # Peek ahead of comments to find next group
+          peek_index = i
+          while peek_index < lines.size && blank_or_comment?(lines[peek_index])
+            peek_index += 1
           end
+
+          # 2. If we hit a group header, handle it
+          if peek_index < lines.size && group_header?(lines[peek_index])
+
+            # Close current group including blanks and comments
+            if current_group_start
+               process_gem_block(current_group_start, peek_index - 1)
+               current_group_start = nil
+            end
+
+            # Now we are at the group header.
+            i = process_group_block(peek_index)
+            next
+          end
+
+          # 3. Not a group. Consume the next "entry" (gem, source, ruby, etc.)
+          _, entry_lines, next_index = collect_gem_entry(lines, i)
+
+          if gem_entry?(entry_lines)
+            current_group_start ||= i
+          else
+            # We hit something that isn't a gem and isn't a group (e.g. source, ruby version, etc.)
+            process_gem_block(current_group_start, i - 1) if current_group_start
+            current_group_start = nil
+          end
+
+          i = next_index
         end
 
-        ranges
+        # Finish any trailing gem block
+        process_gem_block(current_group_start, lines.size - 1) if current_group_start
+      end
+
+      def process_group_block(header_index)
+        end_index = find_matching_end(lines, header_index)
+
+        # If we can't find an end, just skip this line
+        return header_index + 1 unless end_index
+
+        group = Group.new(lines, {
+          header: header_index,
+          body_start: header_index + 1,
+          body_end: end_index - 1,
+          end: end_index
+        })
+
+        group.sort!
+        lines[group.body_start_index..group.body_end_index] = group.body if group.body
+
+        end_index + 1
       end
 
       def group_header?(line)
@@ -109,46 +145,14 @@ module BundleAlphabetically
         nil
       end
 
-      def sort_group_bodies!(lines)
-        groups.each do |group|
-          group.sort!
-          lines[group.body_start_index..group.body_end_index] = group.body
-        end
+      def gem_entry?(entry_lines)
+        entry_lines.any? && gem_start?(entry_lines.first)
       end
 
-      def sort_top_level_segments!(lines)
-        forbidden_ranges = groups.map { |g| (g.header_index..g.end_index) }
-        i = 0
-        current_gem_block_start = nil
+      def process_gem_block(start_index, end_index)
+        return unless start_index
 
-        while i < lines.size
-          if (range = forbidden_ranges.find { |r| r.cover?(i) })
-            if current_gem_block_start
-              create_and_sort_group(lines, current_gem_block_start, i - 1)
-              current_gem_block_start = nil
-            end
-            i = range.end + 1
-            next
-          end
-
-          _, entry_lines, next_index = collect_gem_entry(lines, i)
-          is_gem = entry_lines.any? && gem_start?(entry_lines.first)
-
-          if is_gem
-            current_gem_block_start ||= i
-          else
-            if current_gem_block_start
-              create_and_sort_group(lines, current_gem_block_start, i - 1)
-              current_gem_block_start = nil
-            end
-          end
-
-          i = next_index
-        end
-
-        if current_gem_block_start
-          create_and_sort_group(lines, current_gem_block_start, lines.size - 1)
-        end
+        create_and_sort_group(lines, start_index, end_index)
       end
 
       def create_and_sort_group(lines, start_index, end_index)
@@ -164,205 +168,6 @@ module BundleAlphabetically
         group.sort!
         lines[group.body_start_index..group.body_end_index] = group.body if group.body
       end
-
-      def sort_gem_lines(lines)
-        result = []
-        i = 0
-
-        while i < lines.length
-          line = lines[i]
-
-          if gem_start?(line)
-            preceding_formatting = []
-            while result.any? && blank_or_comment?(result.last)
-              preceding_formatting.unshift(result.pop)
-            end
-
-            region, new_index = collect_and_sort_gem_region(lines, i, preceding_formatting)
-            result.concat(region)
-            i = new_index
-          else
-            result << line
-            i += 1
-          end
-        end
-
-        result
-      end
-
-      def collect_and_sort_gem_region(lines, start_index, initial_formatting = [])
-        entries = []
-        i = start_index
-        unsortable = false
-        first_entry = true
-
-        loop do
-          formatting_lines, entry_lines, next_index = collect_gem_entry(lines, i)
-
-          if first_entry
-            formatting_lines = initial_formatting + formatting_lines
-            first_entry = false
-          end
-
-          if entry_lines.empty?
-             # End of file or region
-             if formatting_lines.any?
-               entries << { name: "", lines: [], formatting_lines: formatting_lines }
-             end
-             i = next_index
-             break
-          end
-
-          unless gem_start?(entry_lines.first)
-            # We hit a non-gem line (e.g. group block or other code).
-            # The formatting lines we collected belong to the gem region (trailing),
-            # but the entry_lines do not.
-            if formatting_lines.any?
-               entries << { name: "", lines: [], formatting_lines: formatting_lines }
-            end
-
-            # The current entry_lines are NOT part of the region, so we must not consume them.
-            # We advanced to next_index which is after entry_lines.
-            # We need to return the index where entry_lines started.
-            i = i + formatting_lines.size
-            break
-          end
-
-          name = extract_gem_name(entry_lines.first)
-          unsortable ||= name.nil?
-
-          if name
-            entries << { name: name, lines: entry_lines, formatting_lines: formatting_lines }
-          else
-            entries << { name: "", lines: entry_lines, formatting_lines: formatting_lines }
-          end
-
-          i = next_index
-        end
-
-        # If we couldn't safely parse names, or there is nothing to sort,
-        # return the region untouched.
-        # Note: if we have 1 gem + trailing comments, entries.length is 2. We don't sort.
-        # But we might want to re-render to ensure formatting is attached?
-        # No, if unsortable, we return original range.
-        # Wait, i is the end index. existing code used lines[start_index...i].
-        if unsortable || entries.count { |e| !e[:name].empty? } <= 1
-          return [lines[start_index...i], i]
-        end
-
-        # Separate trailing entry if exists
-        trailing_entry = nil
-        if entries.last[:name].empty? && entries.last[:lines].empty?
-          trailing_entry = entries.pop
-        end
-
-        sorted = entries.sort_by { |entry| entry[:name].downcase }
-
-        if trailing_entry
-          sorted << trailing_entry
-        end
-
-        region_result = []
-
-        sorted.each do |entry|
-          if entry[:formatting_lines].any?
-             region_result.concat(entry[:formatting_lines])
-          end
-          region_result.concat(entry[:lines])
-        end
-
-        [region_result, i]
-      end
-
-      # No longer returns [separators, entries] structure
-      # def collect_gem_region(lines, start_index) ... end
-
-      def collect_gem_entry(lines, start_index)
-        formatting_lines = []
-
-        while start_index < lines.length && blank_or_comment?(lines[start_index])
-          formatting_lines << lines[start_index]
-          start_index += 1
-        end
-
-        if start_index >= lines.length
-          return [formatting_lines, [], start_index]
-        end
-
-        entry_lines = [lines[start_index]]
-        base_indent = indent_of(lines[start_index])
-        i = start_index + 1
-
-        while i < lines.length
-          line = lines[i]
-          stripped = line.lstrip
-          indent = indent_of(line)
-
-          break if stripped.empty?
-
-          if blank_or_comment?(line) && indent <= base_indent
-            break
-          end
-
-          if indent <= base_indent && starter_keyword?(stripped)
-            break
-          end
-
-          entry_lines << line
-          i += 1
-        end
-
-        [formatting_lines, entry_lines, i]
-      end
-
-      def gem_start?(line)
-        stripped = line.lstrip
-        return false if stripped.start_with?("#")
-
-        stripped.start_with?("gem ") || stripped.start_with?("gem(")
-      end
-
-      def extract_gem_name(line)
-        stripped = line.lstrip
-        match = stripped.match(/\Agem\s+["']([^"']+)["']/)
-        match && match[1]
-      end
-
-      def blank_or_comment?(line)
-        stripped = line.lstrip
-        stripped.empty? || stripped.start_with?("#")
-      end
-
-      def normalize_gem_separators(separators)
-        last_index = separators.length - 1
-
-        separators.each_with_index.map do |sep, idx|
-          # keep leading separators intact (comments / blank lines before the
-          # first gem in the region), and trailing separators (before the
-          # next non-gem line)
-          next sep if idx == 0 || idx == last_index
-
-          contains_comment = sep.any? { |line| line.lstrip.start_with?("#") }
-
-          if contains_comment
-            sep
-          else
-            # strip out pure blank lines so consecutive gem entries are
-            # rendered without empty lines between them
-            sep.reject { |line| line.lstrip.empty? }
-          end
-        end
-      end
-
-      def starter_keyword?(stripped)
-        stripped.start_with?("gem ", "gem(", "group ", "group(", "source ", "source(", "ruby ", "ruby(", "path ", "path(", "plugin ", "plugin(", "platforms ", "platforms(", "end")
-      end
-
-      def indent_of(line)
-        line[/\A[ \t]*/].size
-      end
     end
   end
 end
-
-

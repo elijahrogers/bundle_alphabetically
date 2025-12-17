@@ -88,10 +88,10 @@ RSpec.describe BundleAlphabetically::GemfileSorter do
       GEMFILE
 
       expected = <<~GEMFILE
-        # Core gems
+        # Performance
         gem "bootsnap"
 
-        # Performance
+        # Core gems
         gem "rails"
       GEMFILE
 

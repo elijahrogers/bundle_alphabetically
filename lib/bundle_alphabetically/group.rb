@@ -13,26 +13,57 @@ class BundleAlphabetically::Group
     @end_index        = indices[:end]
     @entries          = []
     @unsortable       = false
+    @trailing_entry   = nil
   end
 
   def sort!
     return unless valid?
 
-    find_entries && sort_entries!
+    find_entries
+    sort_entries!
   end
 
   def sort_entries!
     return if unsortable || entries.empty?
 
-    sorted = entries.sort_by { |entry| entry[:name].downcase }
-    new_lines = []
+    # Don't sort trailing comments and blank lines
+    if entries.last[:name].empty? && entries.last[:lines].empty?
+      @trailing_entry = entries.pop
+    end
 
-    sorted.each_with_index do |entry, index|
-      if entry[:formatting_lines].any?
-        entry[:formatting_lines].each { |line| new_lines << line }
+    # Separate leading blank lines from entries
+    entries_with_blanks = entries.map do |entry|
+      blanks = []
+      comments = []
+      entry[:formatting_lines].each do |line|
+        if line.strip.empty? && comments.empty?
+          blanks << line
+        else
+          comments << line
+        end
       end
 
+      # Note: we modify the entry hash in place, which is fine as it's our internal structure
+      entry[:formatting_lines] = comments
+      { entry: entry, blanks: blanks }
+    end
+
+    sorted_entries = entries_with_blanks.map { |x| x[:entry] }.sort_by { |e| e[:name].downcase }
+    new_lines = []
+
+    sorted_entries.each_with_index do |entry, index|
+      # 1. Add structural blanks for this slot (from original position)
+      entries_with_blanks[index][:blanks].each { |line| new_lines << line }
+
+      # 2. Add gem-attached comments
+      entry[:formatting_lines].each { |line| new_lines << line }
+
+      # 3. Add the gem definition itself
       entry[:lines].each { |line| new_lines << line }
+    end
+
+    if trailing_entry
+      trailing_entry[:formatting_lines].each { |line| new_lines << line }
     end
 
     self.body = new_lines
@@ -42,7 +73,7 @@ class BundleAlphabetically::Group
     index = body_start_index
 
     while index <= body_end_index
-      formatting_lines, entry_lines, after_entry_index = collect_gem_entry(index)
+      formatting_lines, entry_lines, after_entry_index = collect_gem_entry(lines, index, body_end_index)
 
       break if formatting_lines.empty? && entry_lines.empty?
 
