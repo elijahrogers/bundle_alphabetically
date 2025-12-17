@@ -2,9 +2,12 @@ require "bundler"
 require "set"
 
 require_relative "group"
+require_relative "common"
 
 module BundleAlphabetically
   class GemfileSorter
+    extend Common
+
     class CheckFailed < Bundler::BundlerError
       def status_code
         1
