@@ -1,0 +1,5 @@
+source "https://rubygems.org"
+plugin 'bundle_alphabetically', path: '../../'
+
+gem "alpha"
+gem "zebra"

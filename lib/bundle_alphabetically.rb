@@ -26,5 +26,3 @@ Bundler::Plugin.add_hook("after-install-all") do |_dependencies|
     Bundler.ui.error("bundle_alphabetically: #{e.message}")
   end
 end
-
-

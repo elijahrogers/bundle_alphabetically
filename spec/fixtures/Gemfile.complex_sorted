@@ -1,0 +1,20 @@
+source "https://rubygems.org"
+plugin 'bundle_alphabetically', path: '../../'
+
+# This group is for testing
+group :test do
+  gem "minitest"
+  gem "rspec", require: false
+
+  # We use simplecov for coverage
+  gem "simplecov",
+    require: false
+end
+
+gem "bootsnap"
+gem "rails"
+
+group :development do
+  gem "debug"
+  gem "rubocop"
+end
