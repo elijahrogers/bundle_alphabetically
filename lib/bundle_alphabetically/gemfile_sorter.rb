@@ -42,37 +42,44 @@ module BundleAlphabetically
       end
 
       def sort_contents(contents)
+        @groups = []
         @lines = contents.lines
         return contents if lines.empty?
 
-        process_gemfile!
+        collect_groups!
+        sort_groups!
 
         lines.join
       end
 
       private
 
-      def process_gemfile!
+      def sort_groups!
+        groups.each do |group|
+          group.sort!
+          lines[group.body_start_index..group.body_end_index] = group.body if group.body
+        end
+      end
+
+      def collect_groups!
         i = 0
         current_group_start = nil
 
         while i < lines.size
-          # Peek ahead of comments to find next group
+          # Peek ahead of blanks/comments to find next group
           peek_index = i
           while peek_index < lines.size && blank_or_comment?(lines[peek_index])
             peek_index += 1
           end
 
-          # 2. If we hit a group header, handle it
           if peek_index < lines.size && group_header?(lines[peek_index])
 
-            # Close current group including blanks and comments
+            # Close current group
             if current_group_start
-               process_gem_block(current_group_start, peek_index - 1)
-               current_group_start = nil
+              process_gem_block(current_group_start, peek_index - 1)
+              current_group_start = nil
             end
 
-            # Now we are at the group header.
             i = process_group_block(peek_index)
             next
           end
@@ -101,15 +108,12 @@ module BundleAlphabetically
         # If we can't find an end, just skip this line
         return header_index + 1 unless end_index
 
-        group = Group.new(lines, {
-          header: header_index,
+        @groups << Group.new(lines, {
+          header:     header_index,
           body_start: header_index + 1,
-          body_end: end_index - 1,
-          end: end_index
+          body_end:   end_index - 1,
+          end:        end_index
         })
-
-        group.sort!
-        lines[group.body_start_index..group.body_end_index] = group.body if group.body
 
         end_index + 1
       end
@@ -158,15 +162,12 @@ module BundleAlphabetically
       def create_and_sort_group(lines, start_index, end_index)
         return if start_index >= end_index
 
-        group = Group.new(lines, {
-          header: start_index,
+        @groups << Group.new(lines, {
+          header:     start_index,
           body_start: start_index,
-          body_end: end_index,
-          end: end_index
+          body_end:   end_index,
+          end:        end_index
         })
-
-        group.sort!
-        lines[group.body_start_index..group.body_end_index] = group.body if group.body
       end
     end
   end
