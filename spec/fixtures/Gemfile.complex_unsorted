@@ -11,6 +11,11 @@ group :test do
     require: false
 end
 
+# Don't require for boot
+gem "rexml",
+  ">= 3.4.2",
+  require: false
+
 gem "rails"
 gem "bootsnap"
 

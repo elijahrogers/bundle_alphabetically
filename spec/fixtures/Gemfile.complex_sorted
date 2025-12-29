@@ -14,6 +14,11 @@ end
 gem "bootsnap"
 gem "rails"
 
+# Don't require for boot
+gem "rexml",
+  ">= 3.4.2",
+  require: false
+
 group :development do
   gem "debug"
   gem "rubocop"

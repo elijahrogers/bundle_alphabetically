@@ -3,7 +3,7 @@ require_relative "common"
 class BundleAlphabetically::Group
   include BundleAlphabetically::Common
 
-  attr_accessor :header_index, :body_start_index, :body_end_index, :end_index, :unsortable, :entries, :lines, :trailing_entry
+  attr_accessor :header_index, :body_start_index, :body_end_index, :end_index, :unsortable, :entries, :lines, :trailing_lines, :leading_lines
 
   def initialize(lines, indices = {})
     @lines            = lines
@@ -13,7 +13,8 @@ class BundleAlphabetically::Group
     @end_index        = indices[:end]
     @entries          = []
     @unsortable       = false
-    @trailing_entry   = nil
+    @trailing_lines   = []
+    @leading_lines    = []
   end
 
   def sort!
@@ -26,47 +27,81 @@ class BundleAlphabetically::Group
   def sort_entries!
     return if unsortable || entries.empty?
 
-    # Don't sort trailing comments and blank lines
-    if entries.last[:name].empty? && entries.last[:lines].empty?
-      @trailing_entry = entries.pop
-    end
+    collect_trailing_lines
+    collect_leading_lines
+    normalize_formatting_lines
 
-    # Separate leading blank lines from entries
-    entries_with_blanks = entries.map do |entry|
-      blanks = []
-      comments = []
-      entry[:formatting_lines].each do |line|
-        if line.strip.empty? && comments.empty?
-          blanks << line
-        else
-          comments << line
-        end
-      end
+    sorted_entries = entries.sort_by { |e| e[:name].downcase }
 
-      # Note: we modify the entry hash in place, which is fine as it's our internal structure
-      entry[:formatting_lines] = comments
-      { entry: entry, blanks: blanks }
-    end
+    self.body = rebuild_body(sorted_entries)
+  end
 
-    sorted_entries = entries_with_blanks.map { |x| x[:entry] }.sort_by { |e| e[:name].downcase }
-    new_lines = []
+  def rebuild_body(sorted_entries)
+    new_body = []
+
+    leading_lines.each { |line| new_body << line } if !leading_separator_exists?
 
     sorted_entries.each_with_index do |entry, index|
-      # 1. Add structural blanks for this slot (from original position)
-      entries_with_blanks[index][:blanks].each { |line| new_lines << line }
+      # Always move leading blanks for the first entry
+      move_leading_blanks = entry[:formatting_lines].empty? || index.zero?
 
-      # 2. Add gem-attached comments
-      entry[:formatting_lines].each { |line| new_lines << line }
-
-      # 3. Add the gem definition itself
-      entry[:lines].each { |line| new_lines << line }
+      new_body = append_entry(entry, new_body, move_leading_blanks)
     end
 
-    if trailing_entry
-      trailing_entry[:formatting_lines].each { |line| new_lines << line }
-    end
+    trailing_lines.each { |line| new_body << line } if trailing_lines.any?
 
-    self.body = new_lines
+    new_body
+  end
+
+  # If an entry has no comments/formatting (just a plain gem), treat blanks as trailing
+  # separators by placing them after the entry. This keeps "section" spacing stable when
+  # gems reorder.
+  def append_entry(entry, new_body, move_leading_blanks)
+    leading_blanks = entry[:leading_blanks] || []
+
+    leading_blanks.each { |line| new_body << line } unless move_leading_blanks
+
+    entry[:formatting_lines].each { |line| new_body << line }
+    entry[:lines].each { |line| new_body << line }
+
+    leading_blanks.each { |line| new_body << line } if move_leading_blanks
+
+    new_body
+  end
+
+  def normalize_formatting_lines
+    entries.each do |entry|
+      entry[:leading_blanks] = []
+      next unless entry[:formatting_lines]&.any?
+
+      while entry[:formatting_lines].any? && entry[:formatting_lines].first.strip.empty?
+        entry[:leading_blanks] << entry[:formatting_lines].shift
+      end
+    end
+  end
+
+  # If the group starts with blank lines (e.g. spacing after `plugin` / `gemspec`),
+  # keep them at the start of the group rather than attaching them to a gem
+  # that might move during sorting.
+  def collect_leading_lines
+    return unless entries.first[:formatting_lines]&.any?
+
+    while entries.first[:formatting_lines].any? && entries.first[:formatting_lines].first.strip.empty?
+      @leading_lines << entries.first[:formatting_lines].shift
+    end
+  end
+
+  # Don't sort trailing comments and blank lines
+  def collect_trailing_lines
+    return unless entries.last[:name].empty? && entries.last[:lines].empty?
+
+    @trailing_lines = entries.pop[:formatting_lines]
+  end
+
+  # If we're starting from the top or the prior group ended with a blank line,
+  # we don't need to move leading blank lines before the first entry.
+  def leading_separator_exists?
+    !body_start_index.positive? || lines[body_start_index - 1].strip.empty?
   end
 
   def find_entries
