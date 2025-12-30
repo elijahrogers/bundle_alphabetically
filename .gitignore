@@ -7,3 +7,6 @@ Gemfile.lock
 
 # macOS
 .DS_Store
+
+# bundler
+.bundle
