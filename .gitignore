@@ -1,5 +1,6 @@
 # Ruby
 *.gem
+Gemfile.lock
 
 # rbenv
 .ruby-version
