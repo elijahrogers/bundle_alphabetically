@@ -24,6 +24,18 @@ RSpec.describe "BundleAlphabetically Integration" do
         expect(sorted_content).to eq(expected_content)
       end
     end
+
+    it "sorts the Rails Gemfile correctly" do
+      prepare_gemfile("Gemfile.rails_unsorted") do |gemfile_path, _|
+        run_bundle_command("sort_gemfile", gemfile_path)
+
+        sorted_content = File.read(gemfile_path)
+        expected_content = fixture_content("Gemfile.rails_sorted")
+
+        # When comparing large files, strip and maybe normalize newlines
+        expect(sorted_content.strip).to eq(expected_content.strip)
+      end
+    end
     it "raises CheckFailed if unsorted with --check" do
       prepare_gemfile("Gemfile.unsorted") do |gemfile_path, _|
         expect {

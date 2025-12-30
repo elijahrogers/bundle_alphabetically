@@ -49,20 +49,10 @@ module BundleAlphabetically
 
     def starter_keyword?(stripped)
       stripped.start_with?(
-        "gem ", "gem(",
-        "group ", "group(",
-        "source ", "source(",
-        "ruby ", "ruby(",
-        "path ", "path(",
-        "plugin ", "plugin(",
-        "platforms ", "platforms(",
-        "end",
-        "gemspec",
-        "git ", "git(",
-        "if ", "else",
-        "local_gemfile",
-        "instance_eval",
-        "rack_version"
+        "gem ", "gem(", "group ", "group(", "source ", "source(", "ruby ",
+        "ruby(", "path ", "path(", "plugin ", "plugin(", "platforms ",
+        "platforms(", "end", "gemspec", "git ", "git(", "if ", "else",
+        "local_gemfile", "instance_eval", "rack_version"
       )
     end
 
