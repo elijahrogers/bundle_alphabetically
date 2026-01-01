@@ -12,9 +12,6 @@ module BundleAlphabetically
     def exec(_command, args)
       check = args.include?("--check") || args.include?("-c")
       GemfileSorter.run!(check: check)
-    rescue Bundler::BundlerError => e
-      Bundler.ui.error(e.message)
-      raise
     end
   end
 end
